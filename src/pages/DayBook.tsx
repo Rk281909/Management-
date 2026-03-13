@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useDatabase } from '../store/MockDatabaseContext';
-import { Plus, ArrowDownRight, ArrowUpRight, Calendar, X } from 'lucide-react';
+import { Plus, ArrowDownRight, ArrowUpRight, Calendar, X, User, CreditCard, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function DayBook() {
-  const { dayBook, addDayBookEntry } = useDatabase();
+  const { dayBook, addDayBookEntry, customers, staff, currentStaffId } = useDatabase();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [entryType, setEntryType] = useState<'cashIn' | 'cashOut'>('cashIn');
@@ -25,6 +25,18 @@ export default function DayBook() {
   const itemVariants = {
     hidden: { opacity: 0, y: 20 },
     show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+  };
+
+  const getCustomerName = (customerId?: string) => {
+    if (!customerId) return '-';
+    const customer = customers.find(c => c.id === customerId);
+    return customer ? customer.name : 'Unknown';
+  };
+
+  const getStaffName = (staffId?: string) => {
+    if (!staffId) return '-';
+    const s = staff.find(s => s.id === staffId);
+    return s ? s.name : 'Unknown';
   };
 
   return (
@@ -89,9 +101,9 @@ export default function DayBook() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-black/20 text-slate-400 text-xs uppercase tracking-wider border-b border-white/10">
-                <th className="p-4 font-medium">ID</th>
-                <th className="p-4 font-medium">Category</th>
-                <th className="p-4 font-medium">Description</th>
+                <th className="p-4 font-medium">Time/ID</th>
+                <th className="p-4 font-medium">Details</th>
+                <th className="p-4 font-medium">Payment Info</th>
                 <th className="p-4 font-medium text-right text-emerald-400">Cash In (Rs.)</th>
                 <th className="p-4 font-medium text-right text-red-400">Cash Out (Rs.)</th>
               </tr>
@@ -105,13 +117,50 @@ export default function DayBook() {
                     key={entry.id} 
                     className="hover:bg-white/5 transition-colors"
                   >
-                    <td className="p-4 text-sm font-medium text-slate-300">{entry.id}</td>
-                    <td className="p-4 text-sm text-slate-300">{entry.category}</td>
-                    <td className="p-4 text-sm text-slate-400">{entry.description}</td>
-                    <td className="p-4 text-sm font-bold text-emerald-400 text-right">
+                    <td className="p-4">
+                      <div className="text-sm font-medium text-slate-300">{entry.id}</div>
+                      <div className="text-xs text-slate-500 mt-1">{entry.category}</div>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex flex-col gap-1">
+                        {entry.customerId && (
+                          <div className="flex items-center text-xs text-cyan-400">
+                            <User className="h-3 w-3 mr-1" />
+                            {getCustomerName(entry.customerId)}
+                          </div>
+                        )}
+                        <div className="text-sm text-slate-300">{entry.description}</div>
+                        {entry.staffId && (
+                          <div className="text-xs text-slate-500 flex items-center mt-1">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500/50 mr-1.5"></span>
+                            By: {getStaffName(entry.staffId)}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-4">
+                       <div className="flex flex-col gap-1">
+                        {entry.paymentMethod && (
+                          <div className="flex items-center text-xs text-slate-300">
+                            <CreditCard className="h-3 w-3 mr-1 text-slate-400" />
+                            {entry.paymentMethod}
+                          </div>
+                        )}
+                        {entry.referenceNo && (
+                          <div className="flex items-center text-xs text-slate-400">
+                             <FileText className="h-3 w-3 mr-1" />
+                             Ref: {entry.referenceNo}
+                          </div>
+                        )}
+                        {!entry.paymentMethod && !entry.referenceNo && (
+                          <span className="text-xs text-slate-600">-</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-4 text-sm font-bold text-emerald-400 text-right align-top">
                       {entry.type === 'cashIn' ? entry.amount.toLocaleString() : '-'}
                     </td>
-                    <td className="p-4 text-sm font-bold text-red-400 text-right">
+                    <td className="p-4 text-sm font-bold text-red-400 text-right align-top">
                       {entry.type === 'cashOut' ? entry.amount.toLocaleString() : '-'}
                     </td>
                   </motion.tr>
@@ -156,6 +205,9 @@ export default function DayBook() {
                   category: formData.get('category') as string,
                   amount: Number(formData.get('amount')),
                   description: formData.get('description') as string,
+                  paymentMethod: formData.get('paymentMethod') as 'Cash' | 'Check',
+                  referenceNo: formData.get('referenceNo') as string,
+                  staffId: currentStaffId
                 });
                 setIsAddModalOpen(false);
               }}>
@@ -183,6 +235,19 @@ export default function DayBook() {
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Amount (Rs.)</label>
                   <input name="amount" required type="number" min="1" className="w-full bg-black/30 border border-white/10 rounded-xl p-2.5 text-white outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">Payment Method</label>
+                    <select name="paymentMethod" className="w-full bg-black/30 border border-white/10 rounded-xl p-2.5 text-white outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all [&>option]:bg-slate-900">
+                      <option value="Cash">Cash</option>
+                      <option value="Check">Check</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">Reference No.</label>
+                    <input name="referenceNo" type="text" placeholder="Check/Receipt No." className="w-full bg-black/30 border border-white/10 rounded-xl p-2.5 text-white outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all" />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Description</label>

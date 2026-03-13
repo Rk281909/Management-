@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
 import { useDatabase } from '../store/MockDatabaseContext';
-import { Search, Plus, CheckCircle, XCircle, FileText, X } from 'lucide-react';
+import { Search, Plus, CheckCircle, XCircle, FileText, X, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function Loans() {
-  const { loans, customers, addLoan, updateLoanStatus } = useDatabase();
+  const { loans, customers, staff, addLoan, updateLoanStatus, currentStaffId } = useDatabase();
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   const getCustomerName = (id: string) => customers.find(c => c.id === id)?.name || 'Unknown';
+  const getStaffName = (id?: string) => {
+    if (!id) return '-';
+    return staff.find(s => s.id === id)?.name || 'Unknown';
+  };
 
   const filteredLoans = loans.filter(loan => 
     loan.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -62,7 +66,7 @@ export default function Loans() {
                 <th className="p-4 font-medium">Amount (Rs.)</th>
                 <th className="p-4 font-medium">Interest (%)</th>
                 <th className="p-4 font-medium">Duration (Mo)</th>
-                <th className="p-4 font-medium">Status</th>
+                <th className="p-4 font-medium">Status / Staff</th>
                 <th className="p-4 font-medium text-right">Actions</th>
               </tr>
             </thead>
@@ -76,34 +80,44 @@ export default function Loans() {
                     className="hover:bg-white/5 transition-colors"
                   >
                     <td className="p-4 text-sm font-medium text-slate-300">{loan.id}</td>
-                    <td className="p-4 text-sm text-slate-200">{getCustomerName(loan.customerId)}</td>
+                    <td className="p-4 text-sm text-slate-200">
+                      <div className="flex items-center">
+                        <User className="h-4 w-4 mr-2 text-cyan-400" />
+                        {getCustomerName(loan.customerId)}
+                      </div>
+                    </td>
                     <td className="p-4 text-sm font-bold text-cyan-400">{loan.amount.toLocaleString()}</td>
                     <td className="p-4 text-sm text-slate-400">{loan.interestRate}%</td>
                     <td className="p-4 text-sm text-slate-400">{loan.durationMonths}</td>
                     <td className="p-4 text-sm">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
-                        loan.status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 
-                        loan.status === 'pending' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30' :
-                        loan.status === 'approved' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' :
-                        loan.status === 'rejected' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
-                        'bg-white/5 text-slate-300 border-white/10'
-                      }`}>
-                        {loan.status}
-                      </span>
+                      <div className="flex flex-col items-start gap-1">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
+                          loan.status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 
+                          loan.status === 'pending' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30' :
+                          loan.status === 'approved' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' :
+                          loan.status === 'rejected' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
+                          'bg-white/5 text-slate-300 border-white/10'
+                        }`}>
+                          {loan.status}
+                        </span>
+                        {loan.staffId && (
+                          <span className="text-xs text-slate-500">By: {getStaffName(loan.staffId)}</span>
+                        )}
+                      </div>
                     </td>
                     <td className="p-4 text-sm text-right space-x-2">
                       {loan.status === 'pending' && (
                         <>
-                          <button onClick={() => updateLoanStatus(loan.id, 'approved')} className="text-emerald-400 hover:text-emerald-300 p-1.5 bg-emerald-500/10 rounded-lg transition-colors" title="Approve">
+                          <button onClick={() => updateLoanStatus(loan.id, 'approved', currentStaffId)} className="text-emerald-400 hover:text-emerald-300 p-1.5 bg-emerald-500/10 rounded-lg transition-colors" title="Approve">
                             <CheckCircle className="h-4 w-4" />
                           </button>
-                          <button onClick={() => updateLoanStatus(loan.id, 'rejected')} className="text-red-400 hover:text-red-300 p-1.5 bg-red-500/10 rounded-lg transition-colors" title="Reject">
+                          <button onClick={() => updateLoanStatus(loan.id, 'rejected', currentStaffId)} className="text-red-400 hover:text-red-300 p-1.5 bg-red-500/10 rounded-lg transition-colors" title="Reject">
                             <XCircle className="h-4 w-4" />
                           </button>
                         </>
                       )}
                       {loan.status === 'approved' && (
-                        <button onClick={() => updateLoanStatus(loan.id, 'active')} className="text-blue-400 hover:text-blue-300 p-1.5 bg-blue-500/10 rounded-lg px-3 border border-blue-500/20 transition-colors" title="Disburse">
+                        <button onClick={() => updateLoanStatus(loan.id, 'active', currentStaffId)} className="text-blue-400 hover:text-blue-300 p-1.5 bg-blue-500/10 rounded-lg px-3 border border-blue-500/20 transition-colors" title="Disburse">
                           Disburse
                         </button>
                       )}
@@ -154,7 +168,8 @@ export default function Loans() {
                   durationMonths: Number(formData.get('durationMonths')),
                   status: 'pending',
                   remainingBalance: Number(formData.get('amount')),
-                  appliedDate: new Date().toISOString().split('T')[0]
+                  appliedDate: new Date().toISOString().split('T')[0],
+                  staffId: currentStaffId
                 });
                 setIsAddModalOpen(false);
               }}>

@@ -26,6 +26,9 @@ export type SavingsTransaction = {
   amount: number;
   date: string;
   description: string;
+  paymentMethod: 'Cash' | 'Check';
+  referenceNo?: string;
+  staffId: string;
 };
 
 export type Loan = {
@@ -38,6 +41,7 @@ export type Loan = {
   remainingBalance: number;
   appliedDate: string;
   approvedDate?: string;
+  staffId?: string;
 };
 
 export type Installment = {
@@ -47,6 +51,9 @@ export type Installment = {
   dueDate: string;
   status: 'pending' | 'paid' | 'overdue';
   paidDate?: string;
+  paymentMethod?: 'Cash' | 'Check';
+  referenceNo?: string;
+  staffId?: string;
 };
 
 export type DayBookEntry = {
@@ -56,6 +63,10 @@ export type DayBookEntry = {
   category: string;
   amount: number;
   description: string;
+  paymentMethod: 'Cash' | 'Check';
+  referenceNo?: string;
+  staffId: string;
+  customerId?: string;
 };
 
 export type Staff = {
@@ -66,32 +77,15 @@ export type Staff = {
 };
 
 // Initial Mock Data
-const initialCustomers: Customer[] = [
-  { id: 'C001', name: 'Ram Bahadur Thapa', phone: '9841234567', address: 'Kathmandu, Nepal', citizenshipNo: '123-456-789', status: 'active', joinedDate: '2023-01-15' },
-  { id: 'C002', name: 'Sita Sharma', phone: '9801234567', address: 'Pokhara, Nepal', citizenshipNo: '987-654-321', status: 'active', joinedDate: '2023-02-20' },
-  { id: 'C003', name: 'Hari Prasad Gurung', phone: '9851234567', address: 'Chitwan, Nepal', citizenshipNo: '456-789-123', status: 'active', joinedDate: '2023-03-10' },
-];
+const initialCustomers: Customer[] = [];
 
-const initialSavingsAccounts: SavingsAccount[] = [
-  { id: 'SA001', customerId: 'C001', balance: 50000, status: 'active', openedDate: '2023-01-15' },
-  { id: 'SA002', customerId: 'C002', balance: 25000, status: 'active', openedDate: '2023-02-20' },
-];
+const initialSavingsAccounts: SavingsAccount[] = [];
 
-const initialLoans: Loan[] = [
-  { id: 'L001', customerId: 'C003', amount: 100000, interestRate: 12, durationMonths: 12, status: 'active', remainingBalance: 80000, appliedDate: '2023-04-01', approvedDate: '2023-04-05' },
-  { id: 'L002', customerId: 'C001', amount: 50000, interestRate: 10, durationMonths: 6, status: 'pending', remainingBalance: 50000, appliedDate: '2023-10-01' },
-];
+const initialLoans: Loan[] = [];
 
-const initialInstallments: Installment[] = [
-  { id: 'I001', loanId: 'L001', amount: 10000, dueDate: '2023-05-05', status: 'paid', paidDate: '2023-05-04' },
-  { id: 'I002', loanId: 'L001', amount: 10000, dueDate: '2023-06-05', status: 'paid', paidDate: '2023-06-05' },
-  { id: 'I003', loanId: 'L001', amount: 10000, dueDate: '2023-07-05', status: 'pending' },
-];
+const initialInstallments: Installment[] = [];
 
-const initialDayBook: DayBookEntry[] = [
-  { id: 'DB001', date: new Date().toISOString().split('T')[0], type: 'cashIn', category: 'Saving Deposit', amount: 5000, description: 'Deposit by Ram' },
-  { id: 'DB002', date: new Date().toISOString().split('T')[0], type: 'cashOut', category: 'Office Expenses', amount: 1500, description: 'Stationery' },
-];
+const initialDayBook: DayBookEntry[] = [];
 
 const initialStaff: Staff[] = [
   { id: 'S001', name: 'Admin User', role: 'Admin', status: 'active' },
@@ -108,14 +102,16 @@ type DatabaseContextType = {
   installments: Installment[];
   dayBook: DayBookEntry[];
   staff: Staff[];
+  currentStaffId: string;
+  setCurrentStaffId: (id: string) => void;
   addCustomer: (customer: Omit<Customer, 'id'>) => void;
   updateCustomer: (id: string, customer: Partial<Customer>) => void;
   addSavingsAccount: (account: Omit<SavingsAccount, 'id'>) => void;
   addSavingsTransaction: (transaction: Omit<SavingsTransaction, 'id'>) => void;
   addLoan: (loan: Omit<Loan, 'id'>) => void;
-  updateLoanStatus: (id: string, status: Loan['status']) => void;
+  updateLoanStatus: (id: string, status: Loan['status'], staffId?: string) => void;
   addInstallment: (installment: Omit<Installment, 'id'>) => void;
-  updateInstallmentStatus: (id: string, status: Installment['status']) => void;
+  updateInstallmentStatus: (id: string, status: Installment['status'], paymentDetails?: { paymentMethod: 'Cash'|'Check', referenceNo?: string, staffId: string }) => void;
   addDayBookEntry: (entry: Omit<DayBookEntry, 'id'>) => void;
   addStaff: (staff: Omit<Staff, 'id'>) => void;
   updateStaff: (id: string, staff: Partial<Staff>) => void;
@@ -131,11 +127,16 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [installments, setInstallments] = useState<Installment[]>(initialInstallments);
   const [dayBook, setDayBook] = useState<DayBookEntry[]>(initialDayBook);
   const [staff, setStaff] = useState<Staff[]>(initialStaff);
+  const [currentStaffId, setCurrentStaffId] = useState<string>('S001'); // Default to Admin
 
   const generateId = (prefix: string, list: any[]) => `${prefix}${(list.length + 1).toString().padStart(3, '0')}`;
 
   const addCustomer = (customer: Omit<Customer, 'id'>) => {
-    setCustomers([...customers, { ...customer, id: generateId('C', customers) }]);
+    const newId = generateId('C', customers);
+    const newCustomer = { ...customer, id: newId };
+    setCustomers(prev => [...prev, newCustomer]);
+    // Auto-create a savings account for new customer
+    addSavingsAccount({ customerId: newId, balance: 0, status: 'active', openedDate: newCustomer.joinedDate });
   };
 
   const updateCustomer = (id: string, updatedCustomer: Partial<Customer>) => {
@@ -143,7 +144,7 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
 
   const addSavingsAccount = (account: Omit<SavingsAccount, 'id'>) => {
-    setSavingsAccounts([...savingsAccounts, { ...account, id: generateId('SA', savingsAccounts) }]);
+    setSavingsAccounts(prev => [...prev, { ...account, id: generateId('SA', prev) }]);
   };
 
   const addSavingsTransaction = (transaction: Omit<SavingsTransaction, 'id'>) => {
@@ -162,16 +163,45 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
       }
       return acc;
     }));
+
+    // Auto-create DayBook entry
+    const account = savingsAccounts.find(a => a.id === transaction.accountId);
+    addDayBookEntry({
+      date: transaction.date,
+      type: transaction.type === 'deposit' ? 'cashIn' : 'cashOut',
+      category: transaction.type === 'deposit' ? 'Savings Deposit' : 'Savings Withdrawal',
+      amount: transaction.amount,
+      description: transaction.description,
+      paymentMethod: transaction.paymentMethod,
+      referenceNo: transaction.referenceNo,
+      staffId: transaction.staffId,
+      customerId: account?.customerId
+    });
   };
 
   const addLoan = (loan: Omit<Loan, 'id'>) => {
     setLoans([...loans, { ...loan, id: generateId('L', loans) }]);
   };
 
-  const updateLoanStatus = (id: string, status: Loan['status']) => {
+  const updateLoanStatus = (id: string, status: Loan['status'], staffId?: string) => {
     setLoans(loans.map(l => {
       if (l.id === id) {
-        return { ...l, status, approvedDate: status === 'approved' ? new Date().toISOString().split('T')[0] : l.approvedDate };
+        const updated = { ...l, status, approvedDate: status === 'approved' ? new Date().toISOString().split('T')[0] : l.approvedDate };
+        
+        // If loan is disbursed (active), add to DayBook
+        if (status === 'active' && l.status !== 'active') {
+          addDayBookEntry({
+            date: new Date().toISOString().split('T')[0],
+            type: 'cashOut',
+            category: 'Loan Disbursement',
+            amount: l.amount,
+            description: `Loan disbursed for ${id}`,
+            paymentMethod: 'Cash', // Defaulting to Cash for now
+            staffId: staffId || currentStaffId,
+            customerId: l.customerId
+          });
+        }
+        return updated;
       }
       return l;
     }));
@@ -181,16 +211,35 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
     setInstallments([...installments, { ...installment, id: generateId('I', installments) }]);
   };
 
-  const updateInstallmentStatus = (id: string, status: Installment['status']) => {
+  const updateInstallmentStatus = (id: string, status: Installment['status'], paymentDetails?: { paymentMethod: 'Cash'|'Check', referenceNo?: string, staffId: string }) => {
     setInstallments(installments.map(i => {
       if (i.id === id) {
-        const updated = { ...i, status, paidDate: status === 'paid' ? new Date().toISOString().split('T')[0] : undefined };
+        const updated = { 
+          ...i, 
+          status, 
+          paidDate: status === 'paid' ? new Date().toISOString().split('T')[0] : undefined,
+          ...(paymentDetails || {})
+        };
         
         // Update loan remaining balance if paid
         if (status === 'paid' && i.status !== 'paid') {
+          const loan = loans.find(l => l.id === i.loanId);
           setLoans(currentLoans => currentLoans.map(l => 
             l.id === i.loanId ? { ...l, remainingBalance: Math.max(0, l.remainingBalance - i.amount) } : l
           ));
+
+          // Auto-create DayBook entry
+          addDayBookEntry({
+            date: updated.paidDate!,
+            type: 'cashIn',
+            category: 'Loan Installment',
+            amount: i.amount,
+            description: `Installment collection for Loan ${i.loanId}`,
+            paymentMethod: paymentDetails?.paymentMethod || 'Cash',
+            referenceNo: paymentDetails?.referenceNo,
+            staffId: paymentDetails?.staffId || currentStaffId,
+            customerId: loan?.customerId
+          });
         }
         return updated;
       }
@@ -199,7 +248,7 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
 
   const addDayBookEntry = (entry: Omit<DayBookEntry, 'id'>) => {
-    setDayBook([...dayBook, { ...entry, id: generateId('DB', dayBook) }]);
+    setDayBook(prev => [...prev, { ...entry, id: generateId('DB', prev) }]);
   };
 
   const addStaff = (newStaff: Omit<Staff, 'id'>) => {
@@ -212,7 +261,7 @@ export const DatabaseProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   return (
     <DatabaseContext.Provider value={{
-      customers, savingsAccounts, savingsTransactions, loans, installments, dayBook, staff,
+      customers, savingsAccounts, savingsTransactions, loans, installments, dayBook, staff, currentStaffId, setCurrentStaffId,
       addCustomer, updateCustomer, addSavingsAccount, addSavingsTransaction, addLoan, updateLoanStatus, addInstallment, updateInstallmentStatus, addDayBookEntry, addStaff, updateStaff
     }}>
       {children}
